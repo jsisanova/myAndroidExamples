@@ -15,8 +15,6 @@
  */
 package com.example.exoplayer;
 
-import androidx.appcompat.app.AppCompatActivity;
-
 import android.annotation.SuppressLint;
 import android.net.Uri;
 import android.os.Bundle;
@@ -24,14 +22,19 @@ import android.view.View;
 
 import com.google.android.exoplayer2.ExoPlayerFactory;
 import com.google.android.exoplayer2.SimpleExoPlayer;
-import com.google.android.exoplayer2.source.ConcatenatingMediaSource;
 import com.google.android.exoplayer2.source.MediaSource;
-import com.google.android.exoplayer2.source.ProgressiveMediaSource;
+import com.google.android.exoplayer2.source.dash.DashMediaSource;
+import com.google.android.exoplayer2.trackselection.DefaultTrackSelector;
 import com.google.android.exoplayer2.ui.PlayerView;
 import com.google.android.exoplayer2.upstream.DataSource;
 import com.google.android.exoplayer2.upstream.DefaultDataSourceFactory;
 import com.google.android.exoplayer2.util.Util;
 
+import androidx.appcompat.app.AppCompatActivity;
+
+
+// About adaptive streaming: https://codelabs.developers.google.com/codelabs/exoplayer-intro/#4
+//
 /**
  * A fullscreen activity to play audio or video streams.
  */
@@ -85,10 +88,21 @@ public class PlayerActivity extends AppCompatActivity {
   }
 
   private void initializePlayer() {
-    player = ExoPlayerFactory.newSimpleInstance(this);
-    playerView.setPlayer(player);
+    // At the heart of adaptive streaming is selecting the most appropriate track for the current environment.
+    // Let's update our app to play an adaptive streaming source by using adaptive track selection.
+    if (player == null) {
+      // First, we create a DefaultTrackSelector which is responsible for choosing tracks in the media source.
+      DefaultTrackSelector trackSelector = new DefaultTrackSelector();
+      // Then we tell our trackSelector to only pick tracks of standard definition or lower - a good way of saving
+      // our user's data at the expense of quality.
+      trackSelector.setParameters(trackSelector.buildUponParameters().setMaxVideoSizeSd());
+      // Lastly, we use our trackSelector to create a SimpleExoPlayer instance.
+      player = ExoPlayerFactory.newSimpleInstance(this, trackSelector);
+    }
 
-    Uri uri = Uri.parse(getString(R.string.media_url_mp4));
+    playerView.setPlayer(player);
+    //  change our URI to one which points to a DASH media source
+    Uri uri = Uri.parse(getString(R.string.media_url_dash));
     MediaSource mediaSource = buildMediaSource(uri);
 
     player.setPlayWhenReady(playWhenReady);
@@ -96,7 +110,7 @@ public class PlayerActivity extends AppCompatActivity {
     player.prepare(mediaSource, false, false);
   }
 
-  private void releasePlayer() {
+  private void releasePlayer () {
     if (player != null) {
       playbackPosition = player.getCurrentPosition();
       currentWindow = player.getCurrentWindowIndex();
@@ -106,25 +120,16 @@ public class PlayerActivity extends AppCompatActivity {
     }
   }
 
-  private MediaSource buildMediaSource(Uri uri) {
-    // These factories are used to construct two media sources below
-    DataSource.Factory dataSourceFactory =
-            new DefaultDataSourceFactory(this, "exoplayer-codelab");
-    ProgressiveMediaSource.Factory mediaSourceFactory =
-            new ProgressiveMediaSource.Factory(dataSourceFactory);
-
-    // Create a media source using the supplied URI
-    MediaSource mediaSource1 = mediaSourceFactory.createMediaSource(uri);
-
-    // Additionally create a media source using an MP3
-    Uri audioUri = Uri.parse(getString(R.string.media_url_mp3));
-    MediaSource mediaSource2 = mediaSourceFactory.createMediaSource(audioUri);
-
-    return new ConcatenatingMediaSource(mediaSource1, mediaSource2);
+  // DASH is a widely used adaptive streaming format. To stream DASH content we need to create a DashMediaSource
+  private MediaSource buildMediaSource (Uri uri){
+    // We create a factory for data sources, then a factory for DASH media sources. Finally we create the media source using the given URI.
+    DataSource.Factory dataSourceFactory = new DefaultDataSourceFactory(this, "exoplayer-codelab");
+    DashMediaSource.Factory mediaSourceFactory = new DashMediaSource.Factory(dataSourceFactory);
+    return mediaSourceFactory.createMediaSource(uri);
   }
 
   @SuppressLint("InlinedApi")
-  private void hideSystemUi() {
+  private void hideSystemUi () {
     playerView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LOW_PROFILE
             | View.SYSTEM_UI_FLAG_FULLSCREEN
             | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
