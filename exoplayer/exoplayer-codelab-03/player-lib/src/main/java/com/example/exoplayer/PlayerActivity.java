@@ -132,8 +132,7 @@ public class PlayerActivity extends AppCompatActivity {
   }
 
   private MediaSource buildMediaSource(Uri uri) {
-    DataSource.Factory dataSourceFactory =
-      new DefaultDataSourceFactory(this, "exoplayer-codelab");
+    DataSource.Factory dataSourceFactory = new DefaultDataSourceFactory(this, "exoplayer-codelab");
     DashMediaSource.Factory mediaSourceFactory = new DashMediaSource.Factory(dataSourceFactory);
     return mediaSourceFactory.createMediaSource(uri);
   }
