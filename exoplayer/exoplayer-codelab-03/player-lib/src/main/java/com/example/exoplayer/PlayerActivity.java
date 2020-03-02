@@ -20,9 +20,12 @@ import androidx.appcompat.app.AppCompatActivity;
 import android.annotation.SuppressLint;
 import android.net.Uri;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.View;
 
+import com.google.android.exoplayer2.ExoPlayer;
 import com.google.android.exoplayer2.ExoPlayerFactory;
+import com.google.android.exoplayer2.Player;
 import com.google.android.exoplayer2.SimpleExoPlayer;
 import com.google.android.exoplayer2.source.MediaSource;
 import com.google.android.exoplayer2.source.dash.DashMediaSource;
@@ -46,10 +49,16 @@ public class PlayerActivity extends AppCompatActivity {
   private int currentWindow = 0;
   private long playbackPosition = 0;
 
+  private PlaybackStateListener playbackStateListener;
+  private static final String TAG = PlayerActivity.class.getName();
+
   @Override
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
     setContentView(R.layout.activity_player);
+
+    // Instantiate the Listener
+    playbackStateListener = new PlaybackStateListener();
 
     playerView = findViewById(R.id.video_view);
   }
@@ -102,6 +111,10 @@ public class PlayerActivity extends AppCompatActivity {
     player.setPlayWhenReady(playWhenReady);
     player.seekTo(currentWindow, playbackPosition);
     player.prepare(mediaSource, false, false);
+
+    // register our playbackStateListener with the player
+    player.addListener(playbackStateListener);
+    player.prepare(mediaSource, false, false);
   }
 
   private void releasePlayer() {
@@ -109,6 +122,10 @@ public class PlayerActivity extends AppCompatActivity {
       playbackPosition = player.getCurrentPosition();
       currentWindow = player.getCurrentWindowIndex();
       playWhenReady = player.getPlayWhenReady();
+
+      // we need to tidy up to avoid dangling references from the player which could cause a memory leak.
+      player.removeListener(playbackStateListener);
+
       player.release();
       player = null;
     }
@@ -130,4 +147,49 @@ public class PlayerActivity extends AppCompatActivity {
         | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
         | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION);
   }
+
+
+  //  have our PlaybackStateListener implement the Player.EventListener interface.
+  // This is used to inform us about important player events including errors and playback state changes.
+  private class PlaybackStateListener implements Player.EventListener {
+
+    // onPlayerStateChanged is called when:
+    //
+    //play/pause state changes, given by the playWhenReady parameter
+    //playback state changes, given by the playbackState parameter
+    @Override
+    public void onPlayerStateChanged(boolean playWhenReady, int playbackState) {
+      String stateString;
+      switch (playbackState) {
+        // The player has been instantiated but has not yet been prepared with a MediaSource.
+        case ExoPlayer.STATE_IDLE:
+          stateString = "ExoPlayer.STATE_IDLE      -";
+          break;
+        // The player is not able to play from the current position because not enough data has been buffered.
+        case ExoPlayer.STATE_BUFFERING:
+          stateString = "ExoPlayer.STATE_BUFFERING -";
+          break;
+        // The player is able to immediately play from the current position.
+        // This means the player will start playing media automatically if playWhenReady is true. If it is false the player is paused.
+        case ExoPlayer.STATE_READY:
+          stateString = "ExoPlayer.STATE_READY     -";
+          break;
+        // The player has finished playing the media.
+        case ExoPlayer.STATE_ENDED:
+          stateString = "ExoPlayer.STATE_ENDED     -";
+          break;
+        default:
+          stateString = "UNKNOWN_STATE             -";
+          break;
+      }
+      Log.d(TAG, "changed state to " + stateString + " playWhenReady: " + playWhenReady);
+    }
+  }
+  // How do you know if your player is actually playing media? Well, all of the following conditions must be met:
+  //
+  //playback state is STATE_READY
+  //playWhenReady is true
+  //playback is not suppressed for some other reason (e.g. loss of audio focus)
+  //Luckily, ExoPlayer provides a convenience method ExoPlayer.isPlaying for exactly this purpose!
+  //Or, if you want to be kept informed when isPlaying changes, you can listen for onIsPlayingChanged.
 }
